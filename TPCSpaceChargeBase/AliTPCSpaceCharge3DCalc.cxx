@@ -1479,8 +1479,8 @@ void AliTPCSpaceCharge3DCalc::ElectricField(TMatrixD **matricesV, TMatrixD **mat
 /// ~~~
 /// Double_t ezField = (AliTPCPoissonSolver::fgkCathodeV-AliTPCPoissonSolver::fgkGG)/AliTPCPoissonSolver::fgkTPCZ0; // = Electric Field (V/cm) Magnitude ~ -400 V/cm;
 ///
-/// localIntErOverEz = (gridSizeZ/2.0)*((*eR)(i,j)+(*eR)(i,j+1))/(-1*ezField) ;
-/// localIntEPhiOverEz = (gridSizeZ/2.0)*((*ePhi)(i,j)+(*ePhi)(i,j+1))/(-1*ezField) ;
+/// localIntErOverEz = (gridSizeZ/2.0)*((*eR)(i,j)+(*eR)(i,j+1))/(ezField+(*eZ)(i, j)) ;
+/// localIntEPhiOverEz = (gridSizeZ/2.0)*((*ePhi)(i,j)+(*ePhi)(i,j+1))/(ezField+(*eZ)(i, j)) ;
 /// localIntDeltaEz = (gridSizeZ/2.0)*((*eZ)(i,j)+(*eZ)(i,j+1)) ;
 /// ~~~
 ///
@@ -1503,7 +1503,7 @@ void AliTPCSpaceCharge3DCalc::ElectricField(TMatrixD **matricesV, TMatrixD **mat
 /// \f$ \hat{\delta}_{z}(r_{i},z_{j},\phi_{m})  = \int_{z_{j}}^{z_{j+1}} \frac{v^{\prime}(E)}{v_{0}} (E - E_{0}) dzDist\f$
 ///
 /// ~~~
-/// (*distDz)(i,j) = localIntDeltaEz*AliTPCPoissonSolver::fgkdvdE;
+/// (*distDz)(i,j) = localIntDeltaEz*-1*AliTPCPoissonSolver::fgkdvdE;
 /// ~~~
 ///
 /// Where \f$c_{0}\f$ and \f$c_{1}\f$ are constants (see the ALICE-INT-2010-016 for further details).
@@ -1633,13 +1633,13 @@ AliTPCSpaceCharge3DCalc::LocalDistCorrDz(TMatrixD **matricesEr, TMatrixD **matri
 
     for (Int_t j = 0; j < nZColumn - 1; j++) {
       for (Int_t i = 0; i < nRRow; i++) {
-        localIntErOverEz = (gridSizeZ / 2.0) * ((*eR)(i, j) + (*eR)(i, j + 1)) / (-1 * ezField);
-        localIntEPhiOverEz = (gridSizeZ / 2.0) * ((*ePhi)(i, j) + (*ePhi)(i, j + 1)) / (-1 * ezField);
-        localIntDeltaEz = (gridSizeZ / 2.0) * ((*eZ)(i, j) + (*eZ)(i, j + 1));
+        localIntErOverEz = (gridSizeZ * 0.5) * ((*eR)(i, j) + (*eR)(i, j + 1)) / (ezField + (*eZ)(i, j));
+        localIntEPhiOverEz = (gridSizeZ * 0.5) * ((*ePhi)(i, j) + (*ePhi)(i, j + 1)) / (ezField + (*eZ)(i, j));
+        localIntDeltaEz = (gridSizeZ * 0.5) * ((*eZ)(i, j) + (*eZ)(i, j + 1));
 
         (*distDrDz)(i, j) = fC0 * localIntErOverEz + fC1 * localIntEPhiOverEz;
         (*distDPhiRDz)(i, j) = fC0 * localIntEPhiOverEz - fC1 * localIntErOverEz;
-        (*distDz)(i, j) = localIntDeltaEz * AliTPCPoissonSolver::fgkdvdE * AliTPCPoissonSolver::fgkdvdE;// two times?
+        (*distDz)(i, j) = localIntDeltaEz * -1 * AliTPCPoissonSolver::fgkdvdE;
 
 
         (*corrDrDz)(i, j + 1) = -1 * (*distDrDz)(i, j);
@@ -1687,7 +1687,7 @@ void AliTPCSpaceCharge3DCalc::IntegrateDistCorrDriftLineDz(
   const Int_t nRRow, const Int_t nZColumn, const Int_t phiSlice,
   const Double_t *rList, const Double_t *phiList, const Double_t *zList) {
 
-  Float_t drDist, dRPhi, dzDist, ddR, ddRPhi, ddZ;
+  Float_t drDist, dPhi, dzDist, ddR, ddRPhi, ddZ;
   Float_t radius0, phi0, z0, radius, phi, z, radiusCorrection;
   radiusCorrection = 0.0;
   radius = 0.0;
@@ -1727,33 +1727,25 @@ void AliTPCSpaceCharge3DCalc::IntegrateDistCorrDriftLineDz(
     mZIrregular = matricesZIrregular[m];
 
     for (Int_t i = 0; i < nRRow; i++) {
-      // do from j to 0
-      // follow the drift
+      // j = nZColumn - 1
       radius0 = rList[i];
       phi = phi0;
-      radius = radius0;
-
-      drDist = 0.0;
-      dRPhi = 0.0;
-      dzDist = 0.0;
-      ddRPhi = 0.0;
-
       ///
-      (*mDistDrDz)(i, j) = drDist;
-      (*mDistDPhiRDz)(i, j) = dRPhi;
-      (*mDistDz)(i, j) = dzDist;
+      (*mDistDrDz)(i, j) = 0.;
+      (*mDistDPhiRDz)(i, j) = 0.;
+      (*mDistDz)(i, j) = 0.;
 
 //////////////// use irregular grid look up table for correction
       // set
-      (*mCorrIrregularDrDz)(i, j) = -drDist;
-      (*mCorrIrregularDPhiRDz)(i, j) = -dRPhi;
-      (*mCorrIrregularDz)(i, j) = -dzDist;
+      (*mCorrIrregularDrDz)(i, j) = 0.;
+      (*mCorrIrregularDPhiRDz)(i, j) = 0.;
+      (*mCorrIrregularDz)(i, j) = 0.;
 
 
       // distorted point
-      (*mRIrregular)(i, j) = radius0 + drDist;
-      (*mPhiIrregular)(i, j) = phi0 + (dRPhi / radius0);
-      (*mZIrregular)(i, j) = z0 + dzDist;
+      (*mRIrregular)(i, j) = radius0;
+      (*mPhiIrregular)(i, j) = phi0;
+      (*mZIrregular)(i, j) = z0;
 ///////////////
 
     }
@@ -1787,19 +1779,16 @@ void AliTPCSpaceCharge3DCalc::IntegrateDistCorrDriftLineDz(
         // do from j to 0
         // follow the drift
         radius0 = rList[i];
-        phi = phi0;
-        radius = radius0;
 
         drDist = 0.0;
-        dRPhi = 0.0;
+        dPhi = 0.0;
         dzDist = 0.0;
-        ddRPhi = 0.0;
 
 
         // follow the drift line from z=j --> nZColumn - 1
         for (Int_t jj = j; jj < nZColumn; jj++) {
           // interpolation the local distortion for current position
-          phi += ddRPhi / radius;
+          phi = phi0 + dPhi;
           radius = radius0 + drDist;
           z = zList[jj] + dzDist;
 
@@ -1812,24 +1801,24 @@ void AliTPCSpaceCharge3DCalc::IntegrateDistCorrDriftLineDz(
 
           // add local distortion
           drDist += ddR;
-          dRPhi += ddRPhi;
+          dPhi += (ddRPhi / radius);
           dzDist += ddZ;
 
         }
         // set the global distortion after following the electron drift
         (*mDistDrDz)(i, j) = drDist;
-        (*mDistDPhiRDz)(i, j) = dRPhi;
+        (*mDistDPhiRDz)(i, j) = dPhi * radius0;
         (*mDistDz)(i, j) = dzDist;
 /////////////// use irregular grid look up table for correction
         // set
         (*mCorrIrregularDrDz)(i, j) = -drDist;
-        (*mCorrIrregularDPhiRDz)(i, j) = -dRPhi;
+        (*mCorrIrregularDPhiRDz)(i, j) = -1 * dPhi * (radius0 + drDist);
         (*mCorrIrregularDz)(i, j) = -dzDist;
 
 
         // distorted point
         (*mRIrregular)(i, j) = radius0 + drDist;
-        (*mPhiIrregular)(i, j) = phi0 + (dRPhi / radius0);
+        (*mPhiIrregular)(i, j) = phi0 + dPhi;
         (*mZIrregular)(i, j) = z0 + dzDist;
 ///////////////
 
@@ -1838,11 +1827,11 @@ void AliTPCSpaceCharge3DCalc::IntegrateDistCorrDriftLineDz(
 
         // get global correction from j+1
         drDist = (*mCorrDrDz)(i, j + 1);
-        dRPhi = (*mCorrDPhiRDz)(i, j + 1);
+        dPhi = (*mCorrDPhiRDz)(i, j + 1) / radius0;
         dzDist = (*mCorrDz)(i, j + 1);
 
         radiusCorrection = radius0 + drDist;
-        phi = phi0 + dRPhi / radiusCorrection;
+        phi = phi0 + dPhi;
         z = zList[j + 1] + dzDist;
 
         while (phi < 0.0) phi = TMath::TwoPi() + phi;
@@ -1852,10 +1841,10 @@ void AliTPCSpaceCharge3DCalc::IntegrateDistCorrDriftLineDz(
 
         drDist += ddR;
         dzDist += ddZ;
-        dRPhi += ddRPhi;
+        dPhi += ddRPhi / radiusCorrection;
 
         (*mCorrDrDz)(i, j) = drDist;
-        (*mCorrDPhiRDz)(i, j) = dRPhi;
+        (*mCorrDPhiRDz)(i, j) = dPhi * radius0;
         (*mCorrDz)(i, j) = dzDist;
 
       }
@@ -2323,8 +2312,8 @@ void AliTPCSpaceCharge3DCalc::GetDistortion(const Float_t x[], Short_t roc, Floa
 
   // Calculate distorted position
   if (pCyl[0] > 0.0) {
-    pCyl[0] = pCyl[0] + fCorrectionFactor * dCyl[0];
     pCyl[1] = pCyl[1] + fCorrectionFactor * dCyl[1] / pCyl[0];
+    pCyl[0] = pCyl[0] + fCorrectionFactor * dCyl[0];
   }
 
   dCyl[2] = fCorrectionFactor * dCyl[2];
@@ -2380,8 +2369,8 @@ void AliTPCSpaceCharge3DCalc::GetCorrection(const Float_t x[], Short_t roc, Floa
 
   // Calculate distorted position
   if (pCyl[0] > 0.0) {
-    pCyl[0] = pCyl[0] + fCorrectionFactor * dCyl[0];
     pCyl[1] = pCyl[1] + fCorrectionFactor * dCyl[1] / pCyl[0];
+    pCyl[0] = pCyl[0] + fCorrectionFactor * dCyl[0];
   }
 
   dCyl[2] = fCorrectionFactor * dCyl[2];
